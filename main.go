@@ -18,6 +18,7 @@ import (
 type content struct {
   Title string
   Body template.HTML
+  Filename string
 }
 
 const (
@@ -28,6 +29,7 @@ const (
     <title>{{ .Title }}</title>
   </head>
   <body>
+  File name: {{ .Filename }}
 {{ .Body }}
   </body>
 </html>
@@ -58,12 +60,6 @@ func run(filename string, tFname string, out io.Writer, skipPreview bool) error 
     return err
   }
 
-  htmlData, err := parseContent(input, tFname)
-
-  if err != nil {
-     return err
-  }
-
   temp, err := os.CreateTemp("", "mdp*.html")
 
   if err != nil {
@@ -76,6 +72,13 @@ func run(filename string, tFname string, out io.Writer, skipPreview bool) error 
 
   outName := temp.Name()
   fmt.Fprintln(out, outName)
+
+  htmlData, err := parseContent(input, tFname, outName)
+
+  if err != nil {
+     return err
+  }
+
 
   if err := saveHTML(outName, htmlData); err != nil {
     return err
@@ -91,13 +94,19 @@ func run(filename string, tFname string, out io.Writer, skipPreview bool) error 
   return preview(outName)
 }
 
-func parseContent(input []byte, tFname string) ([]byte, error) {
+func parseContent(input []byte, tFname string, outName string) ([]byte, error) {
   // Pase the markdown file
   // To generate a valid HTML
   output := blackfriday.Run(input)
   body := bluemonday.UGCPolicy().SanitizeBytes(output)
 
-  t, err := template.New("mdp").Parse(defaultTemplate)
+  useTemplate := defaultTemplate
+
+  if os.Getenv("DEFAULT_TEMPLATE") != "" {
+    useTemplate = os.Getenv("DEFAULT_TEMPLATE")
+  }
+
+  t, err := template.New("mdp").Parse(useTemplate)
 
   if err != nil {
      return nil, err
@@ -113,10 +122,11 @@ func parseContent(input []byte, tFname string) ([]byte, error) {
     }
   }
 
-  // Intantiate the conten type
+  // Intantiate the content type
   c := content{
     Title: "Markdown Preview Tool",
     Body: template.HTML(body),
+    Filename: outName,
   }
 
   var buffer bytes.Buffer
